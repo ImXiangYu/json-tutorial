@@ -1,6 +1,7 @@
 #include "leptjson.h"
 #include <assert.h>  /* assert() */
 #include <stdlib.h>  /* NULL */
+#include <stdio.h>
 
 #define EXPECT(c, ch)       do { assert(*c->json == (ch)); c->json++; } while(0)
 
@@ -8,10 +9,19 @@ typedef struct {
     const char* json;
 }lept_context;
 
+/* ws = *(%x20 / %x09 / %x0A / %x0D)
+ * 空格符（space U+0020）、制表符（tab U+0009）、换行符（LF U+000A）、回车符（CR U+000D）
+ * 对应' ', '\t', '\n', '\r'
+ * */
 static void lept_parse_whitespace(lept_context* c) {
     const char *p = c->json;
-    while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')
-        p++;
+    while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') {
+      /* 将指针 p 向后移动一个字符的位置，即指向下一个字符，由此读取下一个字符
+       * 读取到不是这四个字符为止
+       * */
+      p++;
+    }
+    /* 使用局部变量 p 可以避免频繁访问 c->json 的内存地址，提升性能 */
     c->json = p;
 }
 
@@ -24,8 +34,28 @@ static int lept_parse_null(lept_context* c, lept_value* v) {
     return LEPT_PARSE_OK;
 }
 
+static int lept_parse_true(lept_context* c, lept_value* v) {
+  EXPECT(c, 't');
+  if (c->json[0] != 'r' || c->json[1] != 'u' || c->json[2] != 'e')
+    return LEPT_PARSE_INVALID_VALUE;
+  c->json += 3;
+  v->type = LEPT_TRUE;
+  return LEPT_PARSE_OK;
+}
+
+static int lept_parse_false(lept_context* c, lept_value* v) {
+  EXPECT(c, 'f');
+  if (c->json[0] != 'a' || c->json[1] != 'l' || c->json[2] != 's' || c->json[3] != 'e')
+    return LEPT_PARSE_INVALID_VALUE;
+  c->json += 4;
+  v->type = LEPT_FALSE;
+  return LEPT_PARSE_OK;
+}
+
 static int lept_parse_value(lept_context* c, lept_value* v) {
     switch (*c->json) {
+        case 't':  return lept_parse_true(c, v);
+        case 'f':  return lept_parse_false(c, v);
         case 'n':  return lept_parse_null(c, v);
         case '\0': return LEPT_PARSE_EXPECT_VALUE;
         default:   return LEPT_PARSE_INVALID_VALUE;
@@ -33,12 +63,27 @@ static int lept_parse_value(lept_context* c, lept_value* v) {
 }
 
 int lept_parse(lept_value* v, const char* json) {
+    /* 如果传入的是null x，即空格后还有字符，则返回LEPT_PARSE_ROOT_NOT_SINGULAR
+     * */
     lept_context c;
     assert(v != NULL);
     c.json = json;
     v->type = LEPT_NULL;
     lept_parse_whitespace(&c);
-    return lept_parse_value(&c, v);
+    /* 可以考虑在这里先不返回lept_parse_value(&c, v)
+     * 而是先执行，执行完之后再对返回结果进行判断
+     * */
+    int ret = lept_parse_value(&c, v);
+    /* 同时打印 json和ret */
+    /*printf("json: %s\nret: %d\n", json, ret);*/
+    if (ret == LEPT_PARSE_OK) {
+      lept_parse_whitespace(&c);
+      if (*c.json != '\0') {
+        ret = LEPT_PARSE_ROOT_NOT_SINGULAR;
+      }
+    }
+
+    return ret;
 }
 
 lept_type lept_get_type(const lept_value* v) {
