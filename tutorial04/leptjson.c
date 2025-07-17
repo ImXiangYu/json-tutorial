@@ -92,11 +92,56 @@ static int lept_parse_number(lept_context* c, lept_value* v) {
 
 static const char* lept_parse_hex4(const char* p, unsigned* u) {
     /* \TODO */
+    /* 这里需要解析之后的16进制数字，并将其存储在码点u内 */
+    /* 不合法的十六进位数返回 LEPT_PARSE_INVALID_UNICODE_HEX */
+    /* 这个函数在成功时返回解析后的文本指针，失败返回 NULL。*/
+    int i;
+    *u = 0;
+    for (i = 0; i < 4; i++) {
+        char ch = *p++;
+        *u <<= 4;
+        if (ch >= '0' && ch <= '9') {
+            *u |= ch - '0';
+        } else if (ch >= 'A' && ch <= 'F') {
+            *u |= ch - 'A' + 10;
+        } else if (ch >= 'a' && ch <= 'f') {
+            *u |= ch - 'a' + 10;
+        } else {
+            return NULL;
+        }
+    }
     return p;
 }
 
 static void lept_encode_utf8(lept_context* c, unsigned u) {
     /* \TODO */
+    /* 首先要用断言确保码点在正确范围 U+0000 ~ U+10FFFF内 */
+    /* U+0000 ~ U+007F	7	0xxxxxxx
+     * U+0080 ~ U+07FF	11	110xxxxx	10xxxxxx
+     * U+0800 ~ U+FFFF	16	1110xxxx	10xxxxxx	10xxxxxx
+     * U+10000 ~ U+10FFFF	21	11110xxx	10xxxxxx	10xxxxxx	10xxxxxx
+     * 对照表
+     * */
+    assert(u >= 0 && u <= 0x10FFFF);
+    if (u <= 0x7F) {
+        /* U+0000 ~ U+007F: 1 byte */
+        PUTC(c, u);
+    } else if (u <= 0x7FF) {
+        /* U+0080 ~ U+07FF: 2 bytes */
+        PUTC(c, 0xC0 | ((u >> 6) & 0x1F));  /* 110xxxxx */
+        PUTC(c, 0x80 | ( u       & 0x3F));  /* 10xxxxxx */
+    } else if (u <= 0xFFFF) {
+        /* U+0800 ~ U+FFFF: 3 bytes */
+        PUTC(c, 0xE0 | ((u >> 12) & 0x0F)); /* 1110xxxx */
+        PUTC(c, 0x80 | ((u >>  6) & 0x3F)); /* 10xxxxxx */
+        PUTC(c, 0x80 | ( u       & 0x3F));  /* 10xxxxxx */
+    } else {
+        /* U+10000 ~ U+10FFFF: 4 bytes */
+        PUTC(c, 0xF0 | ((u >> 18) & 0x07)); /* 11110xxx */
+        PUTC(c, 0x80 | ((u >> 12) & 0x3F)); /* 10xxxxxx */
+        PUTC(c, 0x80 | ((u >>  6) & 0x3F)); /* 10xxxxxx */
+        PUTC(c, 0x80 | ( u       & 0x3F));  /* 10xxxxxx */
+    }
 }
 
 #define STRING_ERROR(ret) do { c->top = head; return ret; } while(0)
@@ -126,9 +171,27 @@ static int lept_parse_string(lept_context* c, lept_value* v) {
                     case 'r':  PUTC(c, '\r'); break;
                     case 't':  PUTC(c, '\t'); break;
                     case 'u':
+                        /* 这里需要解析之后的16进制数字，并将其存储在码点u内 */
                         if (!(p = lept_parse_hex4(p, &u)))
                             STRING_ERROR(LEPT_PARSE_INVALID_UNICODE_HEX);
                         /* \TODO surrogate handling */
+                        if (u >= 0xD800 && u <= 0xDBFF) {
+                            /* 高代理项，需要继续读取低代理项 */
+                            unsigned l;
+                            if (*p != '\\' || *(p + 1) != 'u' || !(p = lept_parse_hex4(p + 2, &l))) {
+                                /* 缺少低代理项或格式错误 */
+                                STRING_ERROR(LEPT_PARSE_INVALID_UNICODE_SURROGATE);
+                            }
+                            if (l < 0xDC00 || l > 0xDFFF) {
+                                /* 低代理项不在合法范围内 */
+                                STRING_ERROR(LEPT_PARSE_INVALID_UNICODE_SURROGATE);
+                            }
+                            /* 计算实际码点 */
+                            u = 0x10000 + ((u - 0xD800) << 10) + (l - 0xDC00);
+                        } else if (u >= 0xDC00 && u <= 0xDFFF) {
+                            /* 单独出现的低代理项也是非法的 */
+                            STRING_ERROR(LEPT_PARSE_INVALID_UNICODE_SURROGATE);
+                        }
                         lept_encode_utf8(c, u);
                         break;
                     default:

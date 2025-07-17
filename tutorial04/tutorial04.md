@@ -138,7 +138,7 @@ static int lept_parse_string(lept_context* c, lept_value* v) {
 }
 ~~~
 
-上面代码的过程很简单，遇到 `\u` 转义时，调用 `lept_parse_hex4()` 解析 4 位十六进数字，存储为码点 `u`。这个函数在成功时返回解析后的文本指针，失败返回 `NULL`。如果失败，就返回 `LEPT_PARSE_INVALID_UNICODE_HEX` 错误。最后，把码点编码成 UTF-8，写进缓冲区。这里没有处理代理对，留作练习。
+上面代码的过程很简单，遇到 `\u` 转义时，调用 `lept_parse_hex4()` 解析 4 位十六进制数字，存储为码点 `u`。这个函数在成功时返回解析后的文本指针，失败返回 `NULL`。如果失败，就返回 `LEPT_PARSE_INVALID_UNICODE_HEX` 错误。最后，把码点编码成 UTF-8，写进缓冲区。这里没有处理代理对，留作练习。
 
 顺带一提，我为 `lept_parse_string()` 做了个简单的重构，把返回错误码的处理抽取为宏：
 
