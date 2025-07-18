@@ -137,6 +137,126 @@ static void test_parse_array() {
     lept_free(&v);
 }
 
+static void test_parse_multi_array() {
+    lept_value v;
+
+    /* 测试 [null, false, true, 123, "abc"] */
+    lept_init(&v);
+    EXPECT_EQ_INT(LEPT_PARSE_OK, lept_parse(&v, "[null, false, true, 123, \"abc\"]"));
+    EXPECT_EQ_INT(LEPT_ARRAY, lept_get_type(&v));
+    EXPECT_EQ_SIZE_T(5, lept_get_array_size(&v));
+
+    /* 检查第一个元素 null */
+    {
+        lept_value* element = lept_get_array_element(&v, 0);
+        EXPECT_EQ_INT(LEPT_NULL, lept_get_type(element));
+    }
+
+    /* 检查第二个元素 false */
+    {
+        lept_value* element = lept_get_array_element(&v, 1);
+        EXPECT_EQ_INT(LEPT_FALSE, lept_get_type(element));
+    }
+
+    /* 检查第三个元素 true */
+    {
+        lept_value* element = lept_get_array_element(&v, 2);
+        EXPECT_EQ_INT(LEPT_TRUE, lept_get_type(element));
+    }
+
+    /* 检查第四个元素 123 */
+    {
+        lept_value* element = lept_get_array_element(&v, 3);
+        EXPECT_EQ_INT(LEPT_NUMBER, lept_get_type(element));
+        EXPECT_EQ_DOUBLE(123.0, lept_get_number(element));
+    }
+
+    /* 检查第五个元素 "abc" */
+    {
+        lept_value* element = lept_get_array_element(&v, 4);
+        EXPECT_EQ_INT(LEPT_STRING, lept_get_type(element));
+        EXPECT_EQ_STRING("abc", lept_get_string(element), lept_get_string_length(element));
+    }
+
+    lept_free(&v);
+
+    /* 测试 [[], [0], [0, 1], [0, 1, 2]] */
+    lept_init(&v);
+    EXPECT_EQ_INT(LEPT_PARSE_OK, lept_parse(&v, "[[], [0], [0, 1], [0, 1, 2]]"));
+    EXPECT_EQ_INT(LEPT_ARRAY, lept_get_type(&v));
+    EXPECT_EQ_SIZE_T(4, lept_get_array_size(&v));
+
+    /* 检查第一个元素 [] */
+    {
+        lept_value* element = lept_get_array_element(&v, 0);
+        EXPECT_EQ_INT(LEPT_ARRAY, lept_get_type(element));
+        EXPECT_EQ_SIZE_T(0, lept_get_array_size(element));
+    }
+
+    /* 检查第二个元素 [0] */
+    {
+        lept_value* element = lept_get_array_element(&v, 1);
+        EXPECT_EQ_INT(LEPT_ARRAY, lept_get_type(element));
+        EXPECT_EQ_SIZE_T(1, lept_get_array_size(element));
+
+        lept_value* inner_element = lept_get_array_element(element, 0);
+        EXPECT_EQ_INT(LEPT_NUMBER, lept_get_type(inner_element));
+        EXPECT_EQ_DOUBLE(0.0, lept_get_number(inner_element));
+    }
+
+    /* 检查第三个元素 [0, 1] */
+    {
+        lept_value* element = lept_get_array_element(&v, 2);
+        EXPECT_EQ_INT(LEPT_ARRAY, lept_get_type(element));
+        EXPECT_EQ_SIZE_T(2, lept_get_array_size(element));
+
+        /* 检查第一个内部元素 0 */
+        {
+            lept_value* inner_element = lept_get_array_element(element, 0);
+            EXPECT_EQ_INT(LEPT_NUMBER, lept_get_type(inner_element));
+            EXPECT_EQ_DOUBLE(0.0, lept_get_number(inner_element));
+        }
+
+        /* 检查第二个内部元素 1 */
+        {
+            lept_value* inner_element = lept_get_array_element(element, 1);
+            EXPECT_EQ_INT(LEPT_NUMBER, lept_get_type(inner_element));
+            EXPECT_EQ_DOUBLE(1.0, lept_get_number(inner_element));
+        }
+    }
+
+    /* 检查第四个元素 [0, 1, 2] */
+    {
+        lept_value* element = lept_get_array_element(&v, 3);
+        EXPECT_EQ_INT(LEPT_ARRAY, lept_get_type(element));
+        EXPECT_EQ_SIZE_T(3, lept_get_array_size(element));
+
+        /* 检查第一个内部元素 0 */
+        {
+            lept_value* inner_element = lept_get_array_element(element, 0);
+            EXPECT_EQ_INT(LEPT_NUMBER, lept_get_type(inner_element));
+            EXPECT_EQ_DOUBLE(0.0, lept_get_number(inner_element));
+        }
+
+        /* 检查第二个内部元素 1 */
+        {
+            lept_value* inner_element = lept_get_array_element(element, 1);
+            EXPECT_EQ_INT(LEPT_NUMBER, lept_get_type(inner_element));
+            EXPECT_EQ_DOUBLE(1.0, lept_get_number(inner_element));
+        }
+
+        /* 检查第三个内部元素 2 */
+        {
+            lept_value* inner_element = lept_get_array_element(element, 2);
+            EXPECT_EQ_INT(LEPT_NUMBER, lept_get_type(inner_element));
+            EXPECT_EQ_DOUBLE(2.0, lept_get_number(inner_element));
+        }
+    }
+
+    lept_free(&v);
+}
+
+
 #define TEST_ERROR(error, json)\
     do {\
         lept_value v;\
@@ -167,7 +287,7 @@ static void test_parse_invalid_value() {
     TEST_ERROR(LEPT_PARSE_INVALID_VALUE, "nan");
 
     /* invalid value in array */
-#if 0
+#if 1
     TEST_ERROR(LEPT_PARSE_INVALID_VALUE, "[1,]");
     TEST_ERROR(LEPT_PARSE_INVALID_VALUE, "[\"a\", nul]");
 #endif
@@ -244,6 +364,7 @@ static void test_parse() {
     test_parse_number();
     test_parse_string();
     test_parse_array();
+    test_parse_multi_array();
     test_parse_expect_value();
     test_parse_invalid_value();
     test_parse_root_not_singular();
